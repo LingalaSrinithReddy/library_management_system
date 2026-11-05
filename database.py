@@ -109,15 +109,27 @@ class Database:
 
     def add_member(self, name, email):
         """Return the new member id (int)."""
-        pass
+        cur = self.conn.execute(
+            "INSERT INTO members (name, email) VALUES (?, ?)",
+            (name, email),
+        )
+        self.conn.commit()
+        return cur.lastrowid
 
     def get_member(self, member_id):
         """Return one member as a tuple (id, name, email), or None if not found."""
-        pass
+        cur = self.conn.execute("SELECT * FROM members WHERE id = ?", (member_id,))
+        return cur.fetchone()
 
     def update_member(self, member_id, name, email):
-        """Update a member's details and return None."""
-        pass
+        """Update a member's details and return None. Raises ValueError if not found."""
+        cur = self.conn.execute(
+            "UPDATE members SET name = ?, email = ? WHERE id = ?",
+            (name, email, member_id),
+        )
+        if cur.rowcount == 0:
+            raise ValueError("Member not found")
+        self.conn.commit()
 
     # ---------- Issues ----------
 

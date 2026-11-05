@@ -48,28 +48,62 @@ class Database:
     # ---------- Books ----------
 
     def add_book(self, title, author, isbn):
-        """Return the new book id (int)."""
-        pass
+        """Return the new book id (int). Raises ValueError if the ISBN already exists."""
+        try:
+            cur = self.conn.execute(
+                "INSERT INTO books (title, author, isbn) VALUES (?, ?, ?)",
+                (title, author, isbn),
+            )
+            self.conn.commit()
+            return cur.lastrowid
+        except sqlite3.IntegrityError:
+            self.conn.rollback()
+            raise ValueError("A book with this ISBN already exists")
 
     def get_book(self, book_id):
         """Return one book as a tuple (id, title, author, isbn, available), or None if not found."""
-        pass
+        cur = self.conn.execute("SELECT * FROM books WHERE id = ?", (book_id,))
+        return cur.fetchone()
 
     def search_books(self, keyword):
-        """Return a list of book tuples whose title or author matches keyword (empty list if none)."""
-        pass
+        """Return a list of book tuples whose title, author or ISBN contains keyword (empty list if none)."""
+        pattern = f"%{keyword}%"
+        cur = self.conn.execute(
+            "SELECT * FROM books WHERE title LIKE ? OR author LIKE ? OR isbn LIKE ?",
+            (pattern, pattern, pattern),
+        )
+        return cur.fetchall()
 
     def list_books(self):
         """Return a list of all book tuples (id, title, author, isbn, available)."""
-        pass
+        cur = self.conn.execute("SELECT * FROM books")
+        return cur.fetchall()
 
     def update_book(self, book_id, title, author, isbn):
-        """Update a book's details and return None."""
-        pass
+        """Update a book's details and return None. Raises ValueError if not found or ISBN is a duplicate."""
+        try:
+            cur = self.conn.execute(
+                "UPDATE books SET title = ?, author = ?, isbn = ? WHERE id = ?",
+                (title, author, isbn, book_id),
+            )
+        except sqlite3.IntegrityError:
+            self.conn.rollback()
+            raise ValueError("A book with this ISBN already exists")
+        if cur.rowcount == 0:
+            raise ValueError("Book not found")
+        self.conn.commit()
 
     def update_availability(self, book_id, status):
-        """Set available to status (1 = available, 0 = issued) and return None."""
-        pass
+        """Set available to status (1 = available, 0 = issued) and return None. Raises ValueError if invalid or not found."""
+        if status not in (0, 1):
+            raise ValueError("Status must be 0 or 1")
+        cur = self.conn.execute(
+            "UPDATE books SET available = ? WHERE id = ?",
+            (status, book_id),
+        )
+        if cur.rowcount == 0:
+            raise ValueError("Book not found")
+        self.conn.commit()
 
     # ---------- Members ----------
 

@@ -148,3 +148,22 @@ class Database:
     def list_issued_books(self):
         """Return a list of issue tuples for all books currently issued (return_date is NULL)."""
         pass
+    # ---------- Files ----------
+
+    def export_books_csv(self, filename="books.csv"):
+        """Write a header row and all books to a CSV file and return None."""
+        books = self.list_books()
+        with open(filename, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(["id", "title", "author", "isbn", "available"])
+            writer.writerows(books)
+
+    def backup_to_json(self, filename="backup.json"):
+        """Write all books, members and issues to one JSON file and return None."""
+        data = {
+            "books": self.conn.execute("SELECT * FROM books").fetchall(),
+            "members": self.conn.execute("SELECT * FROM members").fetchall(),
+            "issues": self.conn.execute("SELECT * FROM issues").fetchall(),
+        }
+        with open(filename, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)

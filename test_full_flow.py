@@ -113,7 +113,14 @@ expect_clean_error("issue_book with no dates", "Issue date and due date are requ
                    db.issue_book, 1, 1, None, None)
 expect_clean_error("return_book with no date", "Return date is required",
                    db.return_book, 2, None)
-
+expect_clean_error("issue_book with garbage dates", "Issue date must be a valid date in YYYY-MM-DD format",
+                   db.issue_book, 1, 1, "hello", "world")
+expect_clean_error("issue_book with impossible date", "Issue date must be a valid date in YYYY-MM-DD format",
+                   db.issue_book, 1, 1, "2026-02-30", "2026-03-10")
+expect_clean_error("due date before issue date", "Due date cannot be before the issue date",
+                   db.issue_book, 1, 1, "2026-11-20", "2026-11-06")
+expect_clean_error("return date before issue date", "Return date cannot be before the issue date",
+                   db.return_book, 2, "2026-01-01")
 # Lookups should never raise, only return None or []
 check("get_book missing returns None", db.get_book(999), None)
 check("get_member missing returns None", db.get_member(999), None)

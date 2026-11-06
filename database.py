@@ -2,6 +2,19 @@ import sqlite3
 import csv
 import json
 
+from datetime import datetime
+
+
+def _parse_date(value, label):
+    """Return a datetime.date for a YYYY-MM-DD string, or raise ValueError."""
+    try:
+        parsed = datetime.strptime(value, "%Y-%m-%d").date()
+    except (TypeError, ValueError):
+        raise ValueError(f"{label} must be a valid date in YYYY-MM-DD format")
+    if parsed.isoformat() != value:  # rejects "2026-1-5", which strptime accepts
+        raise ValueError(f"{label} must be a valid date in YYYY-MM-DD format")
+    return parsed
+
 class Database:
     def __init__(self, db_name="library.db"):
         self.conn = sqlite3.connect(db_name)
@@ -159,6 +172,10 @@ class Database:
             raise ValueError("Book already issued")
         if not issue_date or not due_date:
             raise ValueError("Issue date and due date are required")
+        issued = _parse_date(issue_date, "Issue date")
+        due = _parse_date(due_date, "Due date")
+        if due < issued:
+            raise ValueError("Due date cannot be before the issue date")
         try:
             cur = self.conn.execute(
                 "INSERT INTO issues (book_id, member_id, issue_date, due_date) VALUES (?, ?, ?, ?)",
@@ -172,12 +189,17 @@ class Database:
             raise
 
     def return_book(self, book_id, return_date):
-        """Record the return date on the active issue, mark the book available, and return None. Raises ValueError if the book was not issued."""
+        """Record the return date on the active issue, mark the book available, and return None. Raises ValueError if the book was not issued or the date is invalid."""
         if not return_date:
-            raise ValueError("Return date is required")        
+            raise ValueError("Return date is required")
+
         issue = self.get_active_issue(book_id)
         if issue is None:
             raise ValueError("Book was not issued")
+
+        returned = _parse_date(return_date, "Return date")
+        if returned < _parse_date(issue[3], "Issue date"):
+            raise ValueError("Return date cannot be before the issue date")
 
         try:
             self.conn.execute(

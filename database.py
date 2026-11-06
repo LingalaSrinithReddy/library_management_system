@@ -132,22 +132,69 @@ class Database:
         self.conn.commit()
 
     # ---------- Issues ----------
+    # DESIGN DECISION: Database updates books.available itself inside
+    # issue_book (-> 0) and return_book (-> 1), in the same commit.
+    # Library must NOT call update_availability for issuing or returning.
 
     def issue_book(self, book_id, member_id, issue_date, due_date):
-        """Return the new issue id (int)."""
-        pass
+        """Return the new issue id (int). Raises ValueError if book/member not found or book already issued."""
+        book = self.get_book(book_id)
+        if book is None:
+            raise ValueError("Book not found")
+        if self.get_member(member_id) is None:
+            raise ValueError("Member not found")
+        if book[4] != 1:
+            raise ValueError("Book already issued")
+
+        try:
+            cur = self.conn.execute(
+                "INSERT INTO issues (book_id, member_id, issue_date, due_date) VALUES (?, ?, ?, ?)",
+                (book_id, member_id, issue_date, due_date),
+            )
+            self.conn.execute("UPDATE books SET available = 0 WHERE id = ?", (book_id,))
+            self.conn.commit()
+            return cur.lastrowid
+        except sqlite3.Error:
+            self.conn.rollback()
+            raise
 
     def return_book(self, book_id, return_date):
-        """Record the return date on the active issue and return None."""
-        pass
+        """Record the return date on the active issue, mark the book available, and return None. Raises ValueError if the book was not issued."""
+        issue = self.get_active_issue(book_id)
+        if issue is None:
+            raise ValueError("Book was not issued")
+
+        try:
+            self.conn.execute(
+                "UPDATE issues SET return_date = ? WHERE id = ?",
+                (return_date, issue[0]),
+            )
+            self.conn.execute("UPDATE books SET available = 1 WHERE id = ?", (book_id,))
+            self.conn.commit()
+        except sqlite3.Error:
+            self.conn.rollback()
+            raise
 
     def get_active_issue(self, book_id):
         """Return the unreturned issue tuple (id, book_id, member_id, issue_date, due_date, return_date), or None."""
-        pass
+        cur = self.conn.execute(
+            "SELECT * FROM issues WHERE book_id = ? AND return_date IS NULL",
+            (book_id,),
+        )
+        return cur.fetchone()
 
     def list_issued_books(self):
-        """Return a list of issue tuples for all books currently issued (return_date is NULL)."""
-        pass
+        """Return a list of tuples (issue_id, book_title, member_name, issue_date, due_date) for all open issues."""
+        cur = self.conn.execute(
+            """
+            SELECT issues.id, books.title, members.name, issues.issue_date, issues.due_date
+            FROM issues
+            JOIN books ON issues.book_id = books.id
+            JOIN members ON issues.member_id = members.id
+            WHERE issues.return_date IS NULL
+            """
+        )
+        return cur.fetchall()
     # ---------- Files ----------
 
     def export_books_csv(self, filename="books.csv"):

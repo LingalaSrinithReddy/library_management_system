@@ -48,7 +48,7 @@ class Database:
     # ---------- Books ----------
 
     def add_book(self, title, author, isbn):
-        """Return the new book id (int). Raises ValueError if the ISBN already exists."""
+        """Return the new book id (int). Raises ValueError if the ISBN exists or a field is missing."""
         try:
             cur = self.conn.execute(
                 "INSERT INTO books (title, author, isbn) VALUES (?, ?, ?)",
@@ -56,9 +56,11 @@ class Database:
             )
             self.conn.commit()
             return cur.lastrowid
-        except sqlite3.IntegrityError:
+        except sqlite3.IntegrityError as e:
             self.conn.rollback()
-            raise ValueError("A book with this ISBN already exists")
+            if "UNIQUE" in str(e):
+                raise ValueError("A book with this ISBN already exists")
+            raise ValueError("Title, author and ISBN are required")
 
     def get_book(self, book_id):
         """Return one book as a tuple (id, title, author, isbn, available), or None if not found."""
@@ -80,15 +82,17 @@ class Database:
         return cur.fetchall()
 
     def update_book(self, book_id, title, author, isbn):
-        """Update a book's details and return None. Raises ValueError if not found or ISBN is a duplicate."""
+        """Update a book's details and return None. Raises ValueError if not found, ISBN is a duplicate, or a field is missing."""
         try:
             cur = self.conn.execute(
                 "UPDATE books SET title = ?, author = ?, isbn = ? WHERE id = ?",
                 (title, author, isbn, book_id),
             )
-        except sqlite3.IntegrityError:
+        except sqlite3.IntegrityError as e:
             self.conn.rollback()
-            raise ValueError("A book with this ISBN already exists")
+            if "UNIQUE" in str(e):
+                raise ValueError("A book with this ISBN already exists")
+            raise ValueError("Title, author and ISBN are required")
         if cur.rowcount == 0:
             raise ValueError("Book not found")
         self.conn.commit()
@@ -108,13 +112,17 @@ class Database:
     # ---------- Members ----------
 
     def add_member(self, name, email):
-        """Return the new member id (int)."""
-        cur = self.conn.execute(
-            "INSERT INTO members (name, email) VALUES (?, ?)",
-            (name, email),
-        )
-        self.conn.commit()
-        return cur.lastrowid
+        """Return the new member id (int). Raises ValueError if a field is missing."""
+        try:
+            cur = self.conn.execute(
+                "INSERT INTO members (name, email) VALUES (?, ?)",
+                (name, email),
+            )
+            self.conn.commit()
+            return cur.lastrowid
+        except sqlite3.IntegrityError:
+            self.conn.rollback()
+            raise ValueError("Name and email are required")
 
     def get_member(self, member_id):
         """Return one member as a tuple (id, name, email), or None if not found."""
@@ -122,11 +130,15 @@ class Database:
         return cur.fetchone()
 
     def update_member(self, member_id, name, email):
-        """Update a member's details and return None. Raises ValueError if not found."""
-        cur = self.conn.execute(
-            "UPDATE members SET name = ?, email = ? WHERE id = ?",
-            (name, email, member_id),
-        )
+        """Update a member's details and return None. Raises ValueError if not found or a field is missing."""
+        try:
+            cur = self.conn.execute(
+                "UPDATE members SET name = ?, email = ? WHERE id = ?",
+                (name, email, member_id),
+            )
+        except sqlite3.IntegrityError:
+            self.conn.rollback()
+            raise ValueError("Name and email are required")
         if cur.rowcount == 0:
             raise ValueError("Member not found")
         self.conn.commit()
@@ -145,7 +157,8 @@ class Database:
             raise ValueError("Member not found")
         if book[4] != 1:
             raise ValueError("Book already issued")
-
+        if not issue_date or not due_date:
+            raise ValueError("Issue date and due date are required")
         try:
             cur = self.conn.execute(
                 "INSERT INTO issues (book_id, member_id, issue_date, due_date) VALUES (?, ?, ?, ?)",
@@ -160,6 +173,8 @@ class Database:
 
     def return_book(self, book_id, return_date):
         """Record the return date on the active issue, mark the book available, and return None. Raises ValueError if the book was not issued."""
+        if not return_date:
+            raise ValueError("Return date is required")        
         issue = self.get_active_issue(book_id)
         if issue is None:
             raise ValueError("Book was not issued")
